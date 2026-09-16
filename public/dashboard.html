@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Job Board</title>
+<link rel="stylesheet" href="/app.css">
+<style>
+  .nav { background: var(--ink); color: #fff; padding: 14px 0; }
+  .nav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1080px; padding-bottom: 0; }
+  .nav .brand { font-weight: 800; font-size: 17px; letter-spacing: -.01em; }
+  .tabs { background: var(--bg-2); padding: 6px 0 0; border-bottom: 1px solid var(--line); }
+  .tabs .wrap { display: flex; gap: 4px; max-width: 1080px; overflow-x: auto; padding-bottom: 0; }
+  .tab { padding: 11px 16px; font-weight: 700; font-size: 15px; color: var(--ink-3);
+    background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap; }
+  .tab.on { color: var(--ink); border-bottom-color: var(--blue); }
+  .page { max-width: 1080px; }
+
+  .jobcard { background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px 16px; margin-bottom: 10px; cursor: pointer; display: flex; gap: 14px; align-items: center; }
+  .jobcard:hover { border-color: var(--ink-3); }
+  .jobcard .bar { width: 100%; margin-top: 7px; }
+  .jobcard .who { font-size: 13.5px; color: var(--ink-3); margin-top: 2px; }
+
+  .filters { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 16px; }
+  .chip { padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--line);
+    background: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  dialog { border: none; border-radius: 16px; padding: 0; max-width: 680px; width: calc(100% - 24px);
+    max-height: 92vh; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+  dialog::backdrop { background: rgba(12,16,22,.55); }
+  .sheet-head { position: sticky; top: 0; background: #fff; border-bottom: 1px solid var(--line);
+    padding: 18px 20px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; z-index: 2; }
+  .sheet-body { padding: 20px; }
+  .closex { background: none; border: none; font-size: 26px; line-height: 1; cursor: pointer; color: var(--ink-3); padding: 0 4px; }
+
+  .flag { padding: 11px 13px; border-radius: 9px; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .flag--warn { background: var(--amber-bg); color: var(--amber); }
+  .flag--info { background: var(--line-2); color: var(--ink-2); }
+
+  .dstep { padding: 14px 0; border-bottom: 1px solid var(--line-2); }
+  .dstep:last-child { border-bottom: none; }
+
+  .setup-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 10px; margin-bottom: 20px; }
+  .sbox { padding: 13px 15px; border-radius: 10px; border: 1px solid var(--line); background: #fff; }
+  .sbox b { display: block; font-size: 14px; }
+
+  .steprow { display: flex; gap: 8px; align-items: flex-start; padding: 10px;
+    border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: #fff; }
+  .steprow .grip { cursor: grab; color: var(--ink-3); font-size: 18px; padding-top: 6px; user-select: none; }
+  .empty { text-align: center; padding: 48px 20px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+  <div class="nav"><div class="wrap">
+    <div class="brand" id="brand">Job Board</div>
+    <button class="btn btn--sm btn--ghost" id="signout">Sign out</button>
+  </div></div>
+  <div class="tabs"><div class="wrap">
+    <button class="tab on" data-tab="jobs">Jobs</button>
+    <button class="tab" data-tab="checklists">Checklists</button>
+    <button class="tab" data-tab="crew">Crew</button>
+    <button class="tab" data-tab="setup">Setup</button>
+  </div></div>
+  <div class="wrap page" id="view" style="padding-top:20px"></div>
+  <dialog id="sheet"></dialog>
+  <div id="toast"></div>
+  <script src="/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12161c">
+<meta name="robots" content="noindex, nofollow">
+<title>Job Checklist</title>
+<link rel="stylesheet" href="/app.css">
+<style>
+  body { background: var(--bg-2); }
+  /* room for the fixed submit bar */
+  .wrap { padding-bottom: 150px; }
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: var(--ink); color: #fff;
+    padding: 12px 16px calc(12px + env(safe-area-inset-top)) ;
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
+  .topbar .job { font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+  .topbar .sub { font-size: 13.5px; color: #b9c2cd; margin-top: 2px; }
+  .topbar .bar { margin-top: 10px; background: rgba(255,255,255,.18); }
+  .topbar .count { font-size: 12.5px; color: #cdd5de; margin-top: 6px; font-weight: 650; }
+
+  .step {
+    background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--line);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+  }
+  .step.done { border-left-color: var(--green); }
+  .step.active { border-left-color: var(--blue); box-shadow: var(--shadow); }
+  .step.locked { opacity: .55; background: var(--bg-2); }
+  .step.compact { padding: 12px 14px; cursor: pointer; }
+  .step.compact:active { background: var(--bg-2); }
+  .step-head { display: flex; gap: 11px; align-items: flex-start; margin-bottom: 4px; }
+  .step-num {
+    flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 13px; font-weight: 800;
+    background: var(--line-2); color: var(--ink-2);
+  }
+  .step.done .step-num { background: var(--green); color: #fff; }
+  .step.active .step-num { background: var(--blue); color: #fff; }
+  .step-label { font-size: 17px; font-weight: 750; line-height: 1.3; }
+  .step-help {
+    font-size: 14.5px; color: var(--ink-2); background: var(--bg-2);
+    border-radius: 9px; padding: 10px 12px; margin: 10px 0 12px;
+  }
+  .step-body { margin-top: 12px; }
+  .req { font-size: 11.5px; font-weight: 800; color: var(--amber); text-transform: uppercase; letter-spacing: .04em; }
+
+  .refshot { display: flex; gap: 10px; align-items: center; background: #e7effd;
+    border-radius: 9px; padding: 10px; margin-bottom: 12px; }
+  .refshot img { width: 66px; height: 66px; object-fit: cover; border-radius: 7px; flex: 0 0 auto; }
+
+  .choice-opt {
+    display: flex; align-items: center; gap: 12px; min-height: var(--tap);
+    padding: 12px 14px; margin-bottom: 8px; cursor: pointer;
+    border: 1.5px solid var(--line); border-radius: var(--radius); background: #fff;
+    font-weight: 650;
+  }
+  .choice-opt.sel { border-color: var(--blue); background: #e7effd; color: var(--blue-dark); }
+  .choice-opt input { width: 22px; height: 22px; accent-color: var(--blue); flex: 0 0 auto; margin: 0; }
+
+  .checkbox { display: flex; align-items: center; gap: 13px; min-height: var(--tap);
+    padding: 12px 14px; border: 1.5px solid var(--line); border-radius: var(--radius);
+    cursor: pointer; font-weight: 650; background: #fff; }
+  .checkbox.sel { border-color: var(--green); background: var(--green-bg); }
+  .checkbox input { width: 26px; height: 26px; accent-color: var(--green); flex: 0 0 auto; margin: 0; }
+
+  #sigpad { width: 100%; height: 190px; border: 2px dashed var(--line);
+    border-radius: var(--radius); background: #fff; touch-action: none; display: block; }
+
+  .footer {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+    background: rgba(255,255,255,.97); backdrop-filter: blur(8px);
+    border-top: 1px solid var(--line);
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .footer .inner { max-width: 720px; margin: 0 auto; }
+
+  .banner { padding: 11px 14px; border-radius: 10px; font-size: 14.5px; font-weight: 650; margin-bottom: 12px; }
+  .banner--amber { background: var(--amber-bg); color: var(--amber); }
+  .banner--red { background: var(--red-bg); color: var(--red); }
+  .banner--blue { background: #e7effd; color: var(--blue-dark); }
+
+  .done-screen { text-align: center; padding: 48px 16px; }
+  .done-mark {
+    width: 84px; height: 84px; margin: 0 auto 20px; border-radius: 50%;
+    background: var(--green); color: #fff; display: grid; place-items: center; font-size: 44px;
+  }
+</style>
+</head>
+<body>
+  <div id="app">
+    <div class="topbar"><div class="job">Loading…</div></div>
+    <div class="wrap" style="padding-top:20px"><p class="muted">Getting your checklist…</p></div>
+  </div>
+  <div id="toast"></div>
+  <script src="/worker.js"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Job Report</title>
+<link rel="stylesheet" href="/app.css">
+<style>
+  body { background: #fff; }
+  .rep-head { border-bottom: 3px solid var(--ink); padding: 28px 0 18px; margin-bottom: 24px; }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-top: 18px; }
+  .meta div span { display: block; font-size: 11.5px; font-weight: 800; color: var(--ink-3);
+    text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+  .meta div b { font-size: 15.5px; font-weight: 700; }
+  .rstep { padding: 20px 0; border-bottom: 1px solid var(--line-2); }
+  .rstep:last-child { border-bottom: none; }
+  .rstep h3 { display: flex; gap: 8px; align-items: baseline; }
+  .answer { font-size: 17px; font-weight: 650; margin-top: 6px; }
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
+  .ba figure { margin: 0; }
+  .ba figcaption { font-size: 11.5px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--ink-3); margin-bottom: 5px; }
+  .ba img { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; }
+  .gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; }
+  .gal figure { margin: 0; }
+  .gal img { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block;
+    aspect-ratio: 4/3; object-fit: cover; }
+  .gal figcaption { font-size: 11.5px; color: var(--ink-3); margin-top: 4px; font-weight: 650; }
+  @media print {
+    .noprint { display: none !important; }
+    body { font-size: 12px; }
+    .gal { grid-template-columns: repeat(3, 1fr); }
+    .rstep { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" style="max-width:900px" id="app"><p class="muted" style="padding-top:40px">Loading report…</p></div>
+<script src="/report.js"></script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Sign in</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="wrap" style="max-width:400px;padding-top:12vh">
+  <h1>Job checklists</h1>
+  <p class="muted" style="margin-top:8px">Office sign-in.</p>
+  <form id="f" class="card" style="margin-top:20px">
+    <label class="field"><span>Password</span>
+      <input type="password" id="pw" autocomplete="current-password" autofocus required></label>
+    <button class="btn btn--block" type="submit">Sign in</button>
+    <p id="err" class="small hide" style="color:var(--red);margin:12px 0 0;font-weight:650"></p>
+  </form>
+  <p class="tiny muted" style="margin-top:20px">
+    Crew members don't sign in — they just open the link you text them.</p>
+</div>
+<script>
+document.getElementById('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = document.getElementById('err');
+  err.classList.add('hide');
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password: document.getElementById('pw').value }),
+  });
+  if (res.ok) return location.replace('/');
+  const body = await res.json().catch(() => ({}));
+  err.textContent = body.error || 'Sign in failed.';
+  err.classList.remove('hide');
+});
+</script>
+</body>
+</html>
