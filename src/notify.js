@@ -78,6 +78,11 @@ const OWNER_TEXT = {
     return `DONE: ${job.assignedName} finished ${job.templateSnapshot.name}${job.address ? ` at ${job.address}` : ''} — ${p.photoCount} photos. Review: ${reportLink(job)}`;
   },
   overdue: (job) => `NOT STARTED: ${job.templateSnapshot.name}${job.address ? ` at ${job.address}` : ''} was sent to ${job.assignedName} and still hasn't been opened.`,
+  code_violation: (job, detail) =>
+    `CODE ISSUE on ${job.templateSnapshot.name}${job.address ? ` at ${job.address}` : ''} — ${detail}. `
+    + `${job.assignedName} is on site now and cannot close the job until it is fixed or you approve a variance.`,
+  override_requested: (job, detail) =>
+    `VARIANCE REQUESTED by ${job.assignedName} on ${job.templateSnapshot.name}${job.address ? ` at ${job.address}` : ''} — ${detail}`,
   stalled: (job) => {
     const p = progress(job);
     return `STALLED: ${job.assignedName} is ${p.pct}% through ${job.templateSnapshot.name} and hasn't touched it in a while.`;
@@ -88,14 +93,17 @@ const OWNER_TEXT = {
  * Every notable event lands in the dashboard feed no matter what. SMS and the
  * webhook are extra channels on top, so nothing is ever lost to a bad API key.
  */
-export async function notifyOwner(kind, job, { force = false } = {}) {
+export async function notifyOwner(kind, job, { force = false, detail = '' } = {}) {
   const build = OWNER_TEXT[kind];
   if (!build) return;
-  const message = build(job);
+  const message = build(job, detail);
 
   logActivity(kind, job.id, message, { jobToken: job.token, share: job.shareToken });
 
-  const loud = force || kind === 'submitted' || kind === 'overdue';
+  // A code violation is the one that has to reach a phone immediately: the
+  // trench is open right now and it is cheap to fix right now.
+  const loud = force || kind === 'submitted' || kind === 'overdue'
+    || kind === 'code_violation' || kind === 'override_requested';
   if (loud && config.ownerPhone) await sendSms(config.ownerPhone, message);
 
   await postWebhook({

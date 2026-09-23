@@ -12,6 +12,8 @@ const EMPTY = {
   version: 1,
   crew: [],
   templates: [],
+  jurisdictions: [],
+  codeRules: [],
   jobs: [],
   activity: [],
   settings: {
@@ -134,6 +136,8 @@ export const findJobByToken = (token) => db().jobs.find((j) => j.token === token
 export const findJobByShare = (token) => db().jobs.find((j) => j.shareToken === token) || null;
 export const findJob = (jobId) => db().jobs.find((j) => j.id === jobId) || null;
 export const findTemplate = (tplId) => db().templates.find((t) => t.id === tplId) || null;
+export const findJurisdiction = (jid) => db().jurisdictions.find((j) => j.id === jid) || null;
+export const findCodeRule = (rid) => db().codeRules.find((r) => r.id === rid) || null;
 
 export function logActivity(type, jobId, message, meta = {}) {
   const entry = { id: id(10), at: Date.now(), type, jobId, message, meta, read: false };

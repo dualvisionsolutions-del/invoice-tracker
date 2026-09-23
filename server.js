@@ -181,6 +181,8 @@ route('POST', '/api/job/:token/photo', async (req, res, { token }) => {
 route('POST', '/api/job/:token/photo/:photoId/delete', async (req, res, { token, photoId }) =>
   json(res, 200, await api.removePhoto(token, photoId)));
 route('POST', '/api/job/:token/submit', async (req, res, { token }) => json(res, 200, await api.submitJob(token)));
+route('POST', '/api/job/:token/override', async (req, res, { token }) =>
+  json(res, 200, await api.requestOverride(token, await readJson(req, 8192))));
 
 // ---- report ----
 
@@ -235,6 +237,27 @@ admin('POST', '/api/templates', async (req, res) => json(res, 200, api.upsertTem
 admin('POST', '/api/templates/:id', async (req, res, { id }) =>
   json(res, 200, api.upsertTemplate(await readJson(req, 256 * 1024), id)));
 admin('POST', '/api/templates/:id/archive', async (req, res, { id }) => json(res, 200, api.archiveTemplate(id)));
+
+admin('POST', '/api/jobs/:id/override', async (req, res, { id }) =>
+  json(res, 200, await api.decideOverride(id, await readJson(req, 8192))));
+
+admin('POST', '/api/jurisdictions', async (req, res) =>
+  json(res, 200, api.upsertJurisdiction(await readJson(req, 8192))));
+admin('POST', '/api/jurisdictions/:id', async (req, res, { id }) =>
+  json(res, 200, api.upsertJurisdiction(await readJson(req, 8192), id)));
+admin('POST', '/api/jurisdictions/:id/archive', async (req, res, { id }) =>
+  json(res, 200, api.archiveJurisdiction(id)));
+admin('POST', '/api/jurisdictions/:id/starter-rules', async (req, res, { id }) =>
+  json(res, 200, api.loadStarterRules(id)));
+
+admin('POST', '/api/code-rules', async (req, res) =>
+  json(res, 200, api.upsertCodeRule(await readJson(req, 32 * 1024))));
+admin('POST', '/api/code-rules/:id', async (req, res, { id }) =>
+  json(res, 200, api.upsertCodeRule(await readJson(req, 32 * 1024), id)));
+admin('POST', '/api/code-rules/:id/verify', async (req, res, { id }) =>
+  json(res, 200, api.verifyCodeRule(id, await readJson(req, 8192))));
+admin('POST', '/api/code-rules/:id/archive', async (req, res, { id }) =>
+  json(res, 200, api.archiveCodeRule(id)));
 
 admin('POST', '/api/crew', async (req, res) => json(res, 200, api.upsertCrew(await readJson(req, 8192))));
 admin('POST', '/api/crew/:id/archive', async (req, res, { id }) => json(res, 200, api.archiveCrew(id)));

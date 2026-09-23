@@ -107,6 +107,26 @@ async function boot() {
       ? `<div class="flag" style="background:var(--amber-bg);color:var(--amber);padding:12px 14px;border-radius:9px;font-weight:650;margin-bottom:18px">
            Work in progress — ${data.progress.done} of ${data.progress.total} items documented so far.
          </div>` : ''}
+    ${data.codeFindings?.length ? `
+      <div class="rstep">
+        <h3>Code compliance${data.jurisdictionName ? ` — ${esc(data.jurisdictionName)}` : ''}</h3>
+        <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:14.5px">
+          ${data.codeFindings.map((f) => `
+            <tr style="border-bottom:1px solid var(--line-2)">
+              <td style="padding:9px 8px 9px 0;vertical-align:top;white-space:nowrap">
+                <span class="pill ${f.state === 'pass' ? 'pill--green' : f.state === 'fail' ? 'pill--red' : 'pill--amber'}">
+                  ${f.state === 'waived' ? 'variance' : f.state}</span></td>
+              <td style="padding:9px 0;vertical-align:top">
+                <b>${esc(f.title)}</b><br>
+                <span class="muted">${esc(f.message)}</span>
+                ${f.waiverNote ? `<br><span class="muted">Approved variance: ${esc(f.waiverNote)}</span>` : ''}
+                ${f.citation ? `<br><span class="tiny muted">${esc(f.citation)}</span>` : ''}
+              </td>
+            </tr>`).join('')}
+        </table>
+        <p class="tiny muted" style="margin-top:10px">
+          Measured and recorded on site at the time of the work.</p>
+      </div>` : ''}
     ${data.steps.filter(hasContent).map((s) => renderStep(s, byId)).join('')}
     <p class="tiny muted" style="margin-top:32px;padding-top:16px;border-top:1px solid var(--line-2)">
       Every photo in this report carries the time it was taken and, where the phone allowed it,

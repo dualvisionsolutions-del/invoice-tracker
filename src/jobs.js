@@ -1,4 +1,5 @@
 import { metresBetween } from './util.js';
+import { stepBlockedByCode, evaluateCode } from './codes.js';
 
 /** A step counts as done only when it actually holds what it asked for. */
 export function isStepComplete(step, entry) {
@@ -22,6 +23,17 @@ export function isStepComplete(step, entry) {
   }
 }
 
+/**
+ * Done AND compliant. A depth of 36 inches is a filled-in step, but if the
+ * jurisdiction's verified minimum is 48 it does not satisfy anything - so it
+ * neither counts as progress nor unlocks the steps below it. That is what
+ * "required before moving forward" has to mean to be worth anything.
+ */
+export function isStepSatisfied(step, entry, override) {
+  if (!isStepComplete(step, entry)) return false;
+  return !stepBlockedByCode(step, entry, override);
+}
+
 export function requiredSteps(job) {
   return (job.templateSnapshot?.steps || []).filter((s) => s.required !== false);
 }
@@ -29,7 +41,7 @@ export function requiredSteps(job) {
 export function progress(job) {
   const steps = job.templateSnapshot?.steps || [];
   const required = steps.filter((s) => s.required !== false);
-  const done = required.filter((s) => isStepComplete(s, job.entries?.[s.id])).length;
+  const done = required.filter((s) => isStepSatisfied(s, job.entries?.[s.id], job.overrides?.[s.id])).length;
   return {
     done,
     total: required.length,
@@ -41,9 +53,15 @@ export function progress(job) {
 /** What is still standing between this job and "submitted". */
 export function missingSteps(job) {
   return requiredSteps(job)
-    .filter((s) => !isStepComplete(s, job.entries?.[s.id]))
+    .filter((s) => !isStepSatisfied(s, job.entries?.[s.id], job.overrides?.[s.id]))
     .map((s) => {
-      const have = job.entries?.[s.id]?.photos?.length || 0;
+      const entry = job.entries?.[s.id];
+      const have = entry?.photos?.length || 0;
+      if (isStepComplete(s, entry)) {
+        // Filled in, but it does not meet the code rule riding on it.
+        const finding = evaluateCode(s, entry, job.overrides?.[s.id]);
+        return { stepId: s.id, label: s.label, reason: finding?.message || 'fails a code requirement', code: true };
+      }
       return {
         stepId: s.id,
         label: s.label,
@@ -63,7 +81,7 @@ export function unlockedThrough(job) {
   if (!job.templateSnapshot?.gated) return steps.length;
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
-    if (s.required !== false && !isStepComplete(s, job.entries?.[s.id])) return i + 1;
+    if (s.required !== false && !isStepSatisfied(s, job.entries?.[s.id], job.overrides?.[s.id])) return i + 1;
   }
   return steps.length;
 }

@@ -7,6 +7,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
 let STATE = null;
 let tab = 'jobs';
 let filter = 'open';
+let openJurisdiction = null;
 
 // iOS wants &body=, everything else wants ?body=. Built here because it depends
 // on the phone the office is holding, not on the server.
@@ -100,6 +101,8 @@ function jobsTab() {
           <span class="bold">${esc(job.checklistName)}</span>
           <span class="${STATUS_PILL[job.status]}">${esc(job.statusLabel)}</span>
           ${job.overdue ? '<span class="pill pill--red">No movement</span>' : ''}
+          ${job.codeFails ? `<span class="pill pill--red">${job.codeFails} code fail${job.codeFails > 1 ? 's' : ''}</span>` : ''}
+          ${job.overridesPending ? '<span class="pill pill--amber">Variance requested</span>' : ''}
           ${job.flagCount ? `<span class="pill pill--amber">${job.flagCount} flag${job.flagCount > 1 ? 's' : ''}</span>` : ''}
         </div>
         <div class="who">${esc(job.assignedName)}${job.address ? ` · ${esc(job.address)}` : ''} · ${ago(job.lastActivityAt)}</div>
@@ -135,12 +138,20 @@ function newJobSheet() {
   const tplOptions = STATE.templates.map((t) =>
     `<option value="${t.id}">${esc(t.name)} — ${t.photoCount} photos required</option>`).join('');
 
+  const jurs = STATE.jurisdictions || [];
+  const jurOptions = jurs.map((j) =>
+    `<option value="${j.id}">${esc(j.name)}${j.enforcingCount ? ` — ${j.enforcingCount} code rule${j.enforcingCount > 1 ? 's' : ''}` : ' — no confirmed rules'}</option>`).join('');
+
   openSheet(`
     <div class="sheet-head"><h2>New job</h2><button class="closex" data-close>&times;</button></div>
     <div class="sheet-body">
       <form id="jobform">
         <label class="field"><span>Checklist</span>
           <select name="templateId" required>${tplOptions}</select></label>
+        ${jurs.length ? `<label class="field"><span>Where the job is (sets which code rules apply)</span>
+          <select name="jurisdictionId">
+            ${jurOptions}<option value="">— no code rules on this one —</option>
+          </select></label>` : ''}
         <label class="field"><span>Who's doing it</span>
           <select name="crewId" id="crewsel">
             ${crewOptions}<option value="">— someone not on the list —</option>
@@ -281,6 +292,50 @@ async function openJob(jobId) {
         <span class="pill">${job.progress.done}/${job.progress.total} steps</span>
         <span class="pill">${job.progress.photoCount} photos</span>
       </div>
+      ${job.overrideRequests.length ? job.overrideRequests.map((o) => `
+        <div class="card" style="border-color:var(--amber);background:var(--amber-bg);margin-bottom:12px">
+          <div class="bold" style="color:var(--amber)">Variance requested — ${esc(o.label)}</div>
+          <p class="small" style="margin:6px 0 0">"${esc(o.reason)}" — ${esc(o.requestedBy)}</p>
+          <textarea id="ovnote-${o.stepId}" placeholder="Your decision and the reason for it"
+                    style="min-height:60px;margin-top:9px"></textarea>
+          <div class="row" style="margin-top:8px">
+            <button class="btn btn--green grow btn--sm" data-ov="grant" data-step="${o.stepId}">Approve variance</button>
+            <button class="btn btn--red grow btn--sm" data-ov="deny" data-step="${o.stepId}">Deny — make them fix it</button>
+          </div>
+        </div>`).join('') : ''}
+
+      ${(() => {
+        const settled = job.codeFindings.filter((f) => f.state !== 'unverified');
+        const unconfirmed = job.codeFindings.length - settled.length;
+        if (!settled.length && !unconfirmed) return '';
+        return `<div class="card" style="margin-bottom:12px">
+        <div class="row-between" style="margin-bottom:6px">
+          <span class="bold">Code compliance${job.jurisdictionName ? ` — ${esc(job.jurisdictionName)}` : ''}</span>
+          <span class="row" style="gap:5px">
+            ${job.code.pass ? `<span class="pill pill--green">${job.code.pass} met</span>` : ''}
+            ${job.code.fail ? `<span class="pill pill--red">${job.code.fail} failing</span>` : ''}
+            ${job.code.waived ? `<span class="pill pill--amber">${job.code.waived} waived</span>` : ''}
+            ${job.code.pending ? `<span class="pill">${job.code.pending} pending</span>` : ''}
+          </span>
+        </div>
+        ${settled.map((f) => `
+          <div class="findrow">
+            <span class="pill ${f.state === 'pass' ? 'pill--green' : f.state === 'fail' ? 'pill--red' : 'pill--amber'}"
+                  style="flex:0 0 auto">${f.state}</span>
+            <div class="grow">
+              <div class="bold">${esc(f.label)}</div>
+              <div class="small muted">${esc(f.message)}</div>
+              ${f.rule.citation ? `<div class="tiny muted">${esc(f.rule.citation)}</div>` : ''}
+            </div>
+          </div>`).join('')}
+        ${!settled.length ? '<p class="small muted" style="margin:0">No confirmed rules applied to this job yet.</p>' : ''}
+        ${unconfirmed ? `<p class="tiny muted" style="margin:10px 0 0">
+          ${unconfirmed} more rule${unconfirmed > 1 ? 's are' : ' is'} attached but not confirmed, so
+          ${unconfirmed > 1 ? 'they were' : 'it was'} not enforced here. Confirm ${unconfirmed > 1 ? 'them' : 'it'}
+          under <b>Code rules</b>.</p>` : ''}
+      </div>`;
+      })()}
+
       ${flags}
       ${job.missing.length ? `<div class="flag flag--warn"><b>Still outstanding:</b><br>
         ${job.missing.map((m) => `${esc(m.label)} — ${esc(m.reason)}`).join('<br>')}</div>` : ''}
@@ -309,6 +364,25 @@ async function openJob(jobId) {
       ${steps}
       <button class="btn btn--ghost btn--block" style="margin-top:20px;color:var(--red)" id="delete">Delete this job</button>
     </div>`);
+
+  for (const btn of document.querySelectorAll('[data-ov]')) {
+    btn.addEventListener('click', async () => {
+      const stepId = btn.dataset.step;
+      const note = $(`#ovnote-${stepId}`)?.value || '';
+      if (btn.dataset.ov === 'grant' && !note.trim()) {
+        return toast('Record why the variance is acceptable — it goes on the report.', 'bad');
+      }
+      try {
+        await api(`/api/jobs/${job.id}/override`, {
+          method: 'POST',
+          body: JSON.stringify({ stepId, decision: btn.dataset.ov, note }),
+        });
+        toast(btn.dataset.ov === 'grant' ? 'Variance approved' : 'Denied', 'good');
+        closeSheet();
+        refresh();
+      } catch (err) { toast(err.message, 'bad'); }
+    });
+  }
 
   $('#resend')?.addEventListener('click', async () => {
     const result = await api(`/api/jobs/${job.id}/send`, { method: 'POST' });
@@ -506,6 +580,328 @@ async function editTemplate(tplId) {
   });
 }
 
+
+// -------------------------------------------------------------- code tab
+
+const CHECK_LABEL = {
+  min: 'At least a set value',
+  max: 'No more than a set value',
+  range: 'Between two values',
+  confirm: 'Confirmed on site (yes/no)',
+  photo: 'Photographed',
+};
+
+function codeTab() {
+  const jurs = STATE.jurisdictions || [];
+  const rules = STATE.codeRules || [];
+  const unconfirmed = rules.filter((r) => !r.enforceable).length;
+
+  const intro = `<div class="warnbox">
+    <b>Nothing here enforces until you confirm it.</b>
+    <p class="small" style="margin:8px 0 0">
+      These rules ship blank on purpose. Plumbing code is whatever edition your state adopted
+      plus whatever your county and city amended — that is not something this app can guess, and
+      a wrong number here would be worse than no number at all.</p>
+    <p class="small" style="margin:8px 0 0">
+      Fill in the value from your adopted code, paste the citation, and put your name on it. Until
+      then the rule is invisible to your crew and blocks nothing. Each rule tells you where to look.</p>
+  </div>`;
+
+  if (openJurisdiction) {
+    const jur = jurs.find((j) => j.id === openJurisdiction);
+    if (!jur) { openJurisdiction = null; return codeTab(); }
+    const mine = rules.filter((r) => r.jurisdictionId === jur.id);
+    const tplName = (id) => STATE.templates.find((t) => t.id === id)?.name || id;
+
+    return `
+      <button class="btn btn--ghost btn--sm" data-backjur="1" style="margin-bottom:14px">&larr; All jurisdictions</button>
+      <div class="row-between wrapflex" style="margin-bottom:6px">
+        <h1>${esc(jur.name)}</h1>
+        <div class="row">
+          <button class="btn btn--ghost btn--sm" data-editjur="${jur.id}">Edit</button>
+          <button class="btn btn--sm" data-newrule="${jur.id}">+ Rule</button>
+        </div>
+      </div>
+      <p class="muted small" style="margin-bottom:16px">
+        ${jur.codeBase ? `Adopted code: <b>${esc(jur.codeBase)}</b> · ` : ''}
+        ${jur.enforcingCount} of ${jur.ruleCount} rules confirmed and enforcing</p>
+      ${!mine.length ? `<div class="card" style="text-align:center">
+        <p class="bold">No rules here yet.</p>
+        <p class="small muted">Start from the common subjects for underground work — they come in blank.</p>
+        <button class="btn" data-starter="${jur.id}">Load the starter subjects</button></div>` : ''}
+      ${mine.map((r) => `
+        <div class="rulecard ${r.enforceable ? 'enforcing' : 'pending'}">
+          <div class="row-between wrapflex" style="align-items:flex-start;gap:8px">
+            <div class="grow">
+              <div class="bold">${esc(r.title)}</div>
+              <div class="small" style="margin-top:3px">
+                ${r.requirementText
+                  ? `<b>${esc(r.requirementText)}</b>`
+                  : '<span style="color:var(--amber);font-weight:700">No value filled in yet</span>'}
+                ${r.citation ? ` · <span class="muted">${esc(r.citation)}</span>` : ''}
+              </div>
+              <div class="row wrapflex" style="gap:6px;margin-top:8px">
+                ${r.enforceable
+                  ? `<span class="pill pill--green">Enforcing</span>
+                     <span class="pill">Confirmed by ${esc(r.verifiedBy)}</span>`
+                  : '<span class="pill pill--amber">Not confirmed — blocks nothing</span>'}
+                ${r.blocking ? '' : '<span class="pill">Advisory only</span>'}
+                ${(r.appliesTo || []).map((t) => `<span class="pill pill--blue">${esc(tplName(t))}</span>`).join('')}
+              </div>
+              ${!r.enforceable && r.lookupHint
+                ? `<div class="hint"><b>Where to find this:</b> ${esc(r.lookupHint)}</div>` : ''}
+            </div>
+            <div class="row" style="flex:0 0 auto">
+              <button class="btn btn--ghost btn--sm" data-editrule="${r.id}">Edit</button>
+              <button class="btn btn--sm ${r.enforceable ? 'btn--ghost' : ''}" data-verify="${r.id}">
+                ${r.enforceable ? 'Unconfirm' : 'Confirm'}</button>
+            </div>
+          </div>
+        </div>`).join('')}`;
+  }
+
+  return `
+    <div class="row-between wrapflex" style="margin-bottom:14px">
+      <h1>Code rules</h1>
+      <button class="btn" id="newjur">+ Jurisdiction</button>
+    </div>
+    ${intro}
+    ${unconfirmed ? `<p class="small" style="color:var(--amber);font-weight:700;margin-bottom:12px">
+      ${unconfirmed} rule${unconfirmed > 1 ? 's are' : ' is'} still waiting on a value and a sign-off.</p>` : ''}
+    ${jurs.length ? jurs.map((j) => `
+      <div class="card row-between wrapflex" style="margin-bottom:10px;cursor:pointer" data-openjur="${j.id}">
+        <div>
+          <div class="bold">${esc(j.name)}</div>
+          <div class="small muted">${esc(j.codeBase || 'Adopted code not recorded')}</div>
+        </div>
+        <div class="row">
+          ${j.enforcingCount ? `<span class="pill pill--green">${j.enforcingCount} enforcing</span>` : ''}
+          ${j.ruleCount - j.enforcingCount
+            ? `<span class="pill pill--amber">${j.ruleCount - j.enforcingCount} to confirm</span>` : ''}
+          ${!j.ruleCount ? '<span class="pill">No rules yet</span>' : ''}
+        </div>
+      </div>`).join('') : `<div class="empty">
+        <p class="bold">No jurisdictions yet.</p>
+        <p class="small">Add the county or city you work in, then fill in its rules.</p></div>`}`;
+}
+
+function jurisdictionSheet(jid) {
+  const jur = jid ? (STATE.jurisdictions || []).find((j) => j.id === jid) : null;
+  openSheet(`
+    <div class="sheet-head"><h2>${jur ? 'Edit jurisdiction' : 'New jurisdiction'}</h2>
+      <button class="closex" data-close>&times;</button></div>
+    <div class="sheet-body">
+      <form id="jurform">
+        <label class="field"><span>State</span>
+          <input type="text" name="state" maxlength="2" value="${esc(jur?.state || '')}" placeholder="IA" required></label>
+        <label class="field"><span>County <span class="muted">(leave blank for a state-wide rule set)</span></span>
+          <input type="text" name="county" value="${esc(jur?.county || '')}" placeholder="Polk"></label>
+        <label class="field"><span>City <span class="muted">(only if the city amends the county)</span></span>
+          <input type="text" name="city" value="${esc(jur?.city || '')}"></label>
+        <label class="field"><span>Which code did they adopt?</span>
+          <input type="text" name="codeBase" value="${esc(jur?.codeBase || '')}"
+                 placeholder="e.g. 2021 IPC with local amendments"></label>
+        <label class="field"><span>Notes</span>
+          <textarea name="notes" placeholder="Inspector name, how much notice they need, who to call…">${esc(jur?.notes || '')}</textarea></label>
+        <button class="btn btn--block" type="submit">Save</button>
+        ${jur ? '<button class="btn btn--ghost btn--block" style="margin-top:10px;color:var(--red)" id="rmjur">Remove this jurisdiction</button>' : ''}
+      </form>
+      <p class="tiny muted" style="margin-top:14px">
+        State-wide rules apply to every county you add in that state, and a county's rules apply to
+        its cities. Put a rule at the level it actually lives.</p>
+    </div>`);
+
+  $('#jurform').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const body = Object.fromEntries(new FormData(e.target));
+      const saved = await api(jur ? `/api/jurisdictions/${jur.id}` : '/api/jurisdictions',
+        { method: 'POST', body: JSON.stringify(body) });
+      closeSheet();
+      await refresh();
+      openJurisdiction = saved.id;
+      render();
+    } catch (err) { toast(err.message, 'bad'); }
+  });
+
+  $('#rmjur')?.addEventListener('click', async () => {
+    if (!confirm('Remove this jurisdiction and all its rules? Jobs already sent out keep the rules they were assigned under.')) return;
+    await api(`/api/jurisdictions/${jur.id}/archive`, { method: 'POST' });
+    openJurisdiction = null;
+    closeSheet();
+    refresh();
+  });
+}
+
+function ruleSheet(ruleId, jurisdictionId) {
+  const rule = ruleId ? (STATE.codeRules || []).find((r) => r.id === ruleId) : null;
+  const jid = rule?.jurisdictionId || jurisdictionId;
+  const kind = rule?.check?.kind || 'min';
+
+  openSheet(`
+    <div class="sheet-head"><h2>${rule ? 'Edit rule' : 'New rule'}</h2>
+      <button class="closex" data-close>&times;</button></div>
+    <div class="sheet-body">
+      ${rule?.lookupHint ? `<div class="hint" style="margin-bottom:16px"><b>Where to find this:</b> ${esc(rule.lookupHint)}</div>` : ''}
+      <form id="ruleform">
+        <label class="field"><span>What the rule is about</span>
+          <input type="text" name="title" value="${esc(rule?.title || '')}"
+                 placeholder="Minimum cover over water service" required></label>
+
+        <label class="field"><span>How it is checked</span>
+          <select name="kind" id="rulekind">
+            ${Object.entries(CHECK_LABEL).map(([v, l]) =>
+              `<option value="${v}" ${kind === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select></label>
+
+        <div id="valuefields"></div>
+
+        <label class="field"><span>Citation <span class="muted">(what you are relying on)</span></span>
+          <input type="text" name="citation" value="${esc(rule?.citation || '')}"
+                 placeholder="e.g. 2021 IPC §603.2 as amended by Polk County"></label>
+        <label class="field"><span>Link to the source</span>
+          <input type="url" name="sourceUrl" value="${esc(rule?.sourceUrl || '')}"></label>
+        <label class="field"><span>How to say it to the crew</span>
+          <textarea name="plainLanguage" placeholder="Plain words your guys will actually read on site">${esc(rule?.plainLanguage || '')}</textarea></label>
+
+        <div class="field"><span class="bold small">Applies to which checklists</span>
+          <div style="margin-top:6px">
+            ${STATE.templates.map((t) => `<label class="tiny row" style="gap:7px;padding:5px 0">
+              <input type="checkbox" name="appliesTo" value="${t.id}" style="width:18px;height:18px"
+                ${(rule?.appliesTo || []).includes(t.id) ? 'checked' : ''}>${esc(t.name)}</label>`).join('')}
+          </div>
+          <p class="tiny muted" style="margin-top:4px">Tick none and it applies to every checklist.</p>
+        </div>
+
+        <label class="checkbox ${rule?.blocking !== false ? 'sel' : ''}" style="margin-bottom:16px">
+          <input type="checkbox" name="blocking" ${rule?.blocking !== false ? 'checked' : ''}>
+          <span>Stop the job when this is not met</span></label>
+
+        <button class="btn btn--block" type="submit">Save rule</button>
+        ${rule ? '<button class="btn btn--ghost btn--block" style="margin-top:10px;color:var(--red)" id="rmrule">Delete rule</button>' : ''}
+      </form>
+      ${rule?.verified ? `<p class="tiny muted" style="margin-top:14px">
+        Changing the value or the citation clears the sign-off — somebody has to confirm it again
+        before it starts enforcing.</p>` : ''}
+    </div>`);
+
+  const paintValues = () => {
+    const k = $('#rulekind').value;
+    const c = rule?.check || {};
+    const unit = `<label class="field"><span>Unit</span>
+      <input type="text" name="unit" value="${esc(c.unit || '')}" placeholder="inches, psi, minutes"></label>`;
+    const num = (n, label) => `<label class="field"><span>${label}</span>
+      <input type="number" step="any" name="${n}" value="${c[n] ?? ''}" placeholder="from your adopted code"></label>`;
+    $('#valuefields').innerHTML =
+      k === 'min' ? unit + num('min', 'Minimum allowed')
+      : k === 'max' ? unit + num('max', 'Maximum allowed')
+      : k === 'range' ? unit + num('min', 'Low end') + num('max', 'High end')
+      : k === 'photo' ? `<label class="field"><span>Photos required</span>
+          <input type="number" name="photoMin" min="1" max="10" value="${c.photoMin || 1}"></label>`
+      : '<p class="small muted">Nothing to fill in — the crew ticks it on site.</p>';
+  };
+  $('#rulekind').addEventListener('change', paintValues);
+  paintValues();
+
+  $('#ruleform').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = {
+      jurisdictionId: jid,
+      title: fd.get('title'),
+      citation: fd.get('citation'),
+      sourceUrl: fd.get('sourceUrl'),
+      plainLanguage: fd.get('plainLanguage'),
+      appliesTo: fd.getAll('appliesTo'),
+      blocking: fd.get('blocking') === 'on',
+      mode: rule?.mode || 'add',
+      bindToStep: rule?.bindToStep || '',
+      insertBefore: rule?.insertBefore || '',
+      capture: rule?.capture || { label: fd.get('title') },
+      check: {
+        kind: fd.get('kind'),
+        unit: fd.get('unit') || '',
+        min: fd.get('min'),
+        max: fd.get('max'),
+        photoMin: fd.get('photoMin'),
+      },
+    };
+    try {
+      await api(rule ? `/api/code-rules/${rule.id}` : '/api/code-rules',
+        { method: 'POST', body: JSON.stringify(body) });
+      toast('Saved', 'good');
+      closeSheet();
+      refresh();
+    } catch (err) { toast(err.message, 'bad'); }
+  });
+
+  $('#rmrule')?.addEventListener('click', async () => {
+    if (!confirm('Delete this rule?')) return;
+    await api(`/api/code-rules/${rule.id}/archive`, { method: 'POST' });
+    closeSheet();
+    refresh();
+  });
+}
+
+function verifySheet(ruleId) {
+  const rule = (STATE.codeRules || []).find((r) => r.id === ruleId);
+  if (!rule) return;
+
+  if (rule.enforceable) {
+    openSheet(`
+      <div class="sheet-head"><h2>Stop enforcing this?</h2><button class="closex" data-close>&times;</button></div>
+      <div class="sheet-body">
+        <p><b>${esc(rule.title)}</b> — ${esc(rule.requirementText)}</p>
+        <p class="muted small">Confirmed by ${esc(rule.verifiedBy)}. Turning this off leaves the rule
+          on file but stops it blocking any job.</p>
+        <button class="btn btn--red btn--block" id="unverify">Stop enforcing</button>
+      </div>`);
+    $('#unverify').addEventListener('click', async () => {
+      await api(`/api/code-rules/${rule.id}/verify`, { method: 'POST', body: JSON.stringify({ verified: false }) });
+      closeSheet();
+      refresh();
+    });
+    return;
+  }
+
+  openSheet(`
+    <div class="sheet-head"><h2>Confirm this rule</h2><button class="closex" data-close>&times;</button></div>
+    <div class="sheet-body">
+      <p><b>${esc(rule.title)}</b></p>
+      <p class="small" style="margin-top:4px">
+        ${rule.requirementText
+          ? `This will start enforcing: <b>${esc(rule.requirementText)}</b>`
+          : '<span style="color:var(--red);font-weight:700">Fill in the value first — there is nothing to check against yet.</span>'}
+      </p>
+      ${rule.citation ? `<p class="small muted">${esc(rule.citation)}</p>` : ''}
+      <div class="warnbox" style="margin:16px 0">
+        <p class="small" style="margin:0">You are stating that you checked this against the code your
+        jurisdiction actually adopted. From the moment you confirm it, it blocks your crew's work.
+        Your name goes on it.</p>
+      </div>
+      <form id="verifyform">
+        <label class="field"><span>Your name</span>
+          <input type="text" name="verifiedBy" required placeholder="Who is standing behind this"></label>
+        <label class="field"><span>How did you confirm it?</span>
+          <textarea name="verifiedSource" placeholder="e.g. Called the county building dept, spoke to J. Miller, 14 Mar"></textarea></label>
+        <button class="btn btn--green btn--block" type="submit" ${rule.requirementText ? '' : 'disabled'}>
+          Confirm — start enforcing</button>
+      </form>
+    </div>`);
+
+  $('#verifyform').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api(`/api/code-rules/${rule.id}/verify`, {
+        method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(e.target))),
+      });
+      toast('Now enforcing', 'good');
+      closeSheet();
+      refresh();
+    } catch (err) { toast(err.message, 'bad'); }
+  });
+}
+
 // -------------------------------------------------------------- crew tab
 
 function crewTab() {
@@ -580,7 +976,7 @@ function setupTab() {
 
 function render() {
   $('#brand').textContent = `${STATE.settings.companyName} · Job Board`;
-  const views = { jobs: jobsTab, checklists: checklistsTab, crew: crewTab, setup: setupTab };
+  const views = { jobs: jobsTab, checklists: checklistsTab, code: codeTab, crew: crewTab, setup: setupTab };
   $('#view').innerHTML = views[tab]();
   wireView();
 }
@@ -603,6 +999,31 @@ function wireView() {
     });
   }
   $('#newjob')?.addEventListener('click', newJobSheet);
+  $('#newjur')?.addEventListener('click', () => jurisdictionSheet(null));
+
+  for (const el of document.querySelectorAll('[data-openjur]')) {
+    el.addEventListener('click', () => { openJurisdiction = el.dataset.openjur; render(); });
+  }
+  $('[data-backjur]')?.addEventListener('click', () => { openJurisdiction = null; render(); });
+  for (const el of document.querySelectorAll('[data-editjur]')) {
+    el.addEventListener('click', (e) => { e.stopPropagation(); jurisdictionSheet(el.dataset.editjur); });
+  }
+  for (const el of document.querySelectorAll('[data-newrule]')) {
+    el.addEventListener('click', () => ruleSheet(null, el.dataset.newrule));
+  }
+  for (const el of document.querySelectorAll('[data-editrule]')) {
+    el.addEventListener('click', () => ruleSheet(el.dataset.editrule));
+  }
+  for (const el of document.querySelectorAll('[data-verify]')) {
+    el.addEventListener('click', () => verifySheet(el.dataset.verify));
+  }
+  for (const el of document.querySelectorAll('[data-starter]')) {
+    el.addEventListener('click', async () => {
+      const r = await api(`/api/jurisdictions/${el.dataset.starter}/starter-rules`, { method: 'POST' });
+      toast(`${r.added} subjects added — all blank, fill them in`, 'good');
+      refresh();
+    });
+  }
 
   $('#crewform')?.addEventListener('submit', async (e) => {
     e.preventDefault();

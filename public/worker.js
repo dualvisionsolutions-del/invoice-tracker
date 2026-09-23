@@ -257,6 +257,48 @@ async function capturePhoto(stepId, file) {
 
 // -------------------------------------------------------------------- render
 
+/**
+ * What the crew is told about the code rule on a step. An unconfirmed rule is
+ * deliberately worded as a note and never as a requirement - the office has not
+ * checked it against the adopted code yet, so it carries no authority here.
+ */
+function codeBlock(step) {
+  const rule = step.codeRule;
+  if (!rule) return '';
+  const cite = [rule.jurisdictionName, rule.citation].filter(Boolean).join(' · ');
+  const citeLine = cite ? `<span class="cite">${esc(cite)}</span>` : '';
+
+  if (!rule.enforceable) {
+    return `<div class="code code--note">
+      ${esc(rule.title)} — not confirmed by the office yet, so it is not a requirement on this job.
+      ${citeLine}</div>`;
+  }
+
+  const state = step.code?.state;
+  if (state === 'fail') {
+    return `<div class="code code--fail">
+      <span class="req">DOES NOT MEET CODE</span><br>${esc(step.code.message)}
+      ${citeLine}
+      <button class="btn btn--ghost btn--sm" style="margin-top:10px;width:100%"
+              data-variance="${step.id}">Can't meet this — tell the office why</button>
+    </div>`;
+  }
+  if (state === 'waived') {
+    return `<div class="code code--waived">
+      <span class="req">Variance approved by the office</span><br>${esc(step.code.message)}
+      ${citeLine}</div>`;
+  }
+  if (state === 'pass') {
+    return `<div class="code code--pass">✓ ${esc(step.code.message)}${citeLine}</div>`;
+  }
+  const pending = step.override?.status === 'requested'
+    ? '<br><b>Variance requested — waiting on the office.</b>' : '';
+  return `<div class="code code--rule">
+    <span class="req">${esc(rule.requirementText)}</span>
+    ${rule.plainLanguage ? `<br>${esc(rule.plainLanguage)}` : ''}${pending}
+    ${citeLine}</div>`;
+}
+
 /** One-line recap shown on a folded-up step. */
 function stepSummary(step) {
   const shots = step.photos.length;
@@ -269,6 +311,7 @@ function stepSummary(step) {
 
 function stepStatusClass(step, index, activeIndex) {
   if (step.locked) return 'locked';
+  if (step.code?.state === 'fail') return 'active codefail';
   if (step.complete) return 'done';
   return index === activeIndex ? 'active' : '';
 }
@@ -400,6 +443,14 @@ function render() {
   if (!navigator.onLine) {
     banners.push(`<div class="banner banner--amber">You're offline. Keep working — everything is saved on this phone and sends itself when you get signal.</div>`);
   }
+  if (JOB.code?.fail) {
+    const failing = JOB.steps.filter((s) => s.code?.state === 'fail');
+    banners.push(`<div class="banner banner--red" data-jump="${failing[0]?.id || ''}" style="cursor:pointer">
+      <b>${failing.map((s) => esc(s.label)).join(', ')}</b>
+      ${failing.length > 1 ? 'do' : 'does'} not meet code${JOB.jurisdictionName ? ` for ${esc(JOB.jurisdictionName)}` : ''}.
+      Fix it on site, or tell the office why you can't — nothing below it opens until then.
+      <br><span style="text-decoration:underline">Take me to it</span></div>`);
+  }
   if (JOB.siteNotes) {
     banners.push(`<div class="banner banner--blue">${esc(JOB.siteNotes)}</div>`);
   }
@@ -413,7 +464,8 @@ function render() {
 
     // A finished step folds down to one line so the step they're actually on
     // is the thing on screen, not thirty items of scrollback.
-    if (step.complete && !reopened.has(step.id) && i !== activeIndex) {
+    const codeFail = step.code?.state === 'fail';
+    if (step.complete && !codeFail && !reopened.has(step.id) && i !== activeIndex) {
       return `<section class="step done compact" data-expand="${step.id}">
         <div class="step-head" style="margin:0;align-items:center">
           <div class="step-num">✓</div>
@@ -425,7 +477,7 @@ function render() {
 
     return `<section class="step ${cls}" data-step="${step.id}">
       <div class="step-head">
-        <div class="step-num">${step.complete ? '✓' : i + 1}</div>
+        <div class="step-num">${step.code?.state === 'fail' ? '!' : step.complete ? '✓' : i + 1}</div>
         <div class="grow">
           <div class="step-label">${esc(step.label)}</div>
           ${optional ? '<div class="tiny muted">Optional</div>' : ''}
@@ -433,16 +485,21 @@ function render() {
         </div>
       </div>
       ${!step.locked && step.help ? `<div class="step-help">${esc(step.help)}</div>` : ''}
+      ${!step.locked ? codeBlock(step) : ''}
       ${!step.locked ? `<div class="step-body">${renderStepBody(step)}</div>` : ''}
     </section>`;
   }).join('');
 
-  const blocked = p.done < p.total || pendingCount > 0;
+  const codeFails = JOB.code?.fail || 0;
+  const blocked = p.done < p.total || pendingCount > 0 || codeFails > 0;
   const footer = `<div class="footer"><div class="inner">
     ${pendingCount ? `<div class="small bold" style="margin-bottom:8px;color:var(--amber)">
       ${pendingCount} photo${pendingCount > 1 ? 's' : ''} still uploading — leave this page open.</div>` : ''}
     <button class="btn btn--lg btn--block ${blocked ? '' : 'btn--green'}" id="submit" ${blocked ? 'disabled' : ''}>
-      ${pendingCount ? 'Waiting on photos…' : blocked ? `${p.total - p.done} item${p.total - p.done === 1 ? '' : 's'} left` : 'Turn in this job'}
+      ${pendingCount ? 'Waiting on photos…'
+        : codeFails ? `${codeFails} code issue${codeFails > 1 ? 's' : ''} to clear`
+        : blocked ? `${p.total - p.done} item${p.total - p.done === 1 ? '' : 's'} left`
+        : 'Turn in this job'}
     </button>
   </div></div>`;
 
@@ -482,6 +539,34 @@ function wireUp() {
       render();
       document.querySelector(`[data-step="${el.dataset.expand}"]`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
+  $('[data-jump]')?.addEventListener('click', (e) => {
+    const stepId = e.currentTarget.dataset.jump;
+    if (!stepId) return;
+    reopened.add(stepId);
+    render();
+    document.querySelector(`[data-step="${stepId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  // ask the office for a variance on a code step that cannot be met on site
+  for (const btn of document.querySelectorAll('[data-variance]')) {
+    btn.addEventListener('click', async () => {
+      const reason = prompt(
+        'What is stopping you from meeting this?\n\n'
+        + 'Be specific — the office has to decide on it, and this goes on the record.');
+      if (!reason || !reason.trim()) return;
+      try {
+        JOB = await apiCall(`/api/job/${TOKEN}/override`, {
+          method: 'POST',
+          body: JSON.stringify({ stepId: btn.dataset.variance, reason: reason.trim() }),
+        });
+        toast('Sent to the office', 'good');
+        render();
+      } catch (err) {
+        toast(err.message, 'bad');
+      }
     });
   }
 
@@ -629,9 +714,18 @@ async function doSubmit() {
     JOB = await apiCall(`/api/job/${TOKEN}/submit`, { method: 'POST' });
     render();
   } catch (err) {
-    if (err.payload?.missing?.length) {
-      const list = err.payload.missing.map((m) => `• ${m.label} (${m.reason})`).join('\n');
-      alert(`Not finished yet:\n\n${list}`);
+    const codeFails = err.payload?.codeFailures || [];
+    const missing = err.payload?.missing || [];
+    if (codeFails.length || missing.length) {
+      const parts = [];
+      if (codeFails.length) {
+        parts.push(`DOES NOT MEET CODE:\n${codeFails.map((c) =>
+          `• ${c.label} — ${c.message}${c.citation ? `\n  (${c.citation})` : ''}`).join('\n')}`);
+      }
+      if (missing.length) {
+        parts.push(`STILL TO DO:\n${missing.map((m) => `• ${m.label} (${m.reason})`).join('\n')}`);
+      }
+      alert(parts.join('\n\n'));
     } else {
       toast(err.message, 'bad');
     }
