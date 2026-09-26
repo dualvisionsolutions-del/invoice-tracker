@@ -103,7 +103,7 @@ export const SEED_CODE_RULES = [
   {
     key: 'water_inspection_before_backfill',
     appliesTo: ['tpl_water_line'],
-    title: 'Inspection before the trench is covered',
+    title: 'Inspection before the water trench is covered',
     mode: 'add',
     insertBefore: 'backfill',
     capture: {
@@ -145,7 +145,7 @@ export const SEED_CODE_RULES = [
   {
     key: 'sewer_inspection_before_backfill',
     appliesTo: ['tpl_sewer_lateral'],
-    title: 'Inspection before the trench is covered',
+    title: 'Inspection before the sewer trench is covered',
     mode: 'add',
     insertBefore: 'bedding',
     capture: {

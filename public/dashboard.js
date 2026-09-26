@@ -668,6 +668,20 @@ function codeTab() {
     ${intro}
     ${unconfirmed ? `<p class="small" style="color:var(--amber);font-weight:700;margin-bottom:12px">
       ${unconfirmed} rule${unconfirmed > 1 ? 's are' : ' is'} still waiting on a value and a sign-off.</p>` : ''}
+    ${!jurs.length && (STATE.codePacks || []).length ? `
+      <div class="card" style="margin-bottom:16px">
+        <div class="bold" style="margin-bottom:6px">Start from a state</div>
+        ${(STATE.codePacks || []).map((p) => `
+          <div class="row-between wrapflex" style="gap:12px;padding:8px 0">
+            <div class="grow">
+              <div class="bold">${esc(p.name)}</div>
+              <div class="small muted">${esc(p.blurb)}</div>
+              <div class="tiny muted" style="margin-top:4px">
+                ${p.jurisdictionCount} jurisdictions · ${p.ruleCount} rules, all blank and pointed at the regulation to read</div>
+            </div>
+            <button class="btn btn--sm" data-pack="${p.id}" style="flex:0 0 auto">Set up ${esc(p.name)}</button>
+          </div>`).join('')}
+      </div>` : ''}
     ${jurs.length ? jurs.map((j) => `
       <div class="card row-between wrapflex" style="margin-bottom:10px;cursor:pointer" data-openjur="${j.id}">
         <div>
@@ -1016,6 +1030,15 @@ function wireView() {
   }
   for (const el of document.querySelectorAll('[data-verify]')) {
     el.addEventListener('click', () => verifySheet(el.dataset.verify));
+  }
+  for (const el of document.querySelectorAll('[data-pack]')) {
+    el.addEventListener('click', async () => {
+      try {
+        const r = await api(`/api/code-packs/${el.dataset.pack}/install`, { method: 'POST' });
+        toast(`${r.pack} set up — ${r.newRules} rules, all still needing a value`, 'good');
+        refresh();
+      } catch (err) { toast(err.message, 'bad'); }
+    });
   }
   for (const el of document.querySelectorAll('[data-starter]')) {
     el.addEventListener('click', async () => {

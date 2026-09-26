@@ -114,6 +114,37 @@ A rule can do two things:
   immediately before the backfill steps, so the trench cannot be closed until
   it's ticked.
 
+### Starting from a state
+
+The **Code rules** tab offers a setup for your state. A pack creates the
+jurisdictions in the right shape and points every rule at the exact regulation
+to read. It fills in no values and confirms nothing.
+
+**Kentucky** ships as a pack, set up the way Kentucky actually works:
+
+- Kentucky runs **one statewide plumbing code** (815 KAR Chapter 20, under
+  KRS 318.130), so the plumbing rules sit on a **Kentucky — statewide** entry and
+  apply automatically to every county you add under it.
+- Permits and inspections are run by the **state** Department of Housing,
+  Buildings and Construction, Division of Plumbing — not by the county. State
+  plumbing inspectors work out of local health departments on a weekly itinerary.
+  Under KRS 318.140 a local government may adopt and enforce the state code with
+  its own inspectors, which is worth checking for your counties.
+- **Grant County** and **Pendleton County** entries carry what genuinely is
+  local: road and right-of-way cut permits, the water district serving the job,
+  and which health department the inspector works from.
+
+Each Kentucky rule names its regulation — 815 KAR 20:120 for water supply and
+distribution, 20:130 for house sewers, 20:150 for inspection and tests, 20:020
+for the approved parts list, KRS 367.4901–367.4917 for locates — and links to it.
+Your job is to open the current DHBC code book, read the regulation, type the
+number, and sign for it.
+
+Two things the Kentucky hints flag because they catch people out: the water
+district serving a job can require more than the plumbing code does, so use the
+deeper figure; and Kentucky runs its own OSHA state plan, so trench rules are not
+only the federal text.
+
 ### Nothing enforces until you confirm it
 
 **Every rule ships blank.** The starter set names the subjects that jurisdictions
@@ -214,6 +245,7 @@ src/api.js              every endpoint's actual work
 src/seed-templates.js   the six starter checklists — plain data, edit freely
 src/codes.js            code rules: matching, enforcement, the verification rule
 src/seed-codes.js       starter code subjects — blank values, with lookup hints
+src/code-packs.js       per-state setups (Kentucky) — jurisdictions + citations
 src/notify.js           Twilio, webhooks, the wording of every message
 public/worker.js        the phone app: camera, compression, offline queue
 public/dashboard.js     your board

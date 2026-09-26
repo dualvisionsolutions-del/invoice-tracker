@@ -50,6 +50,26 @@ try {
   const waterLine = state.templates.find((t) => t.name === 'Water Line Installation');
   const member = (await call('POST', '/api/crew', { name: 'Mike R', phone: '5551234567' })).data;
 
+  console.log('\nPack and starter data are well formed');
+  {
+    const { CODE_PACKS } = await import('../src/code-packs.js');
+    const { SEED_CODE_RULES } = await import('../src/seed-codes.js');
+    let clash = null;
+    for (const pack of Object.values(CODE_PACKS)) {
+      const seen = new Set();
+      for (const r of pack.rules) {
+        const key = `${r.jurisdiction}::${r.title}`;
+        if (seen.has(key)) clash = `${pack.id} ${key}`;
+        seen.add(key);
+      }
+    }
+    // Rules are deduped by title on re-install, so a repeated title silently
+    // drops one. Catch it here rather than in somebody's trench.
+    ok('no two pack rules share a title within one jurisdiction', !clash, clash || '');
+    const seedTitles = SEED_CODE_RULES.map((r) => r.title);
+    ok('no two starter rules share a title', new Set(seedTitles).size === seedTitles.length);
+  }
+
   console.log('\nNothing is invented');
   const jur = (await call('POST', '/api/jurisdictions',
     { state: 'IA', county: 'Polk', codeBase: 'whatever the state adopted' })).data;
@@ -202,6 +222,54 @@ try {
   const reRules = (await call('GET', '/api/state')).data.codeRules;
   ok('changing what a rule requires drops its sign-off',
     reRules.find((r) => r.id === depthRule.id).verified === false);
+
+  console.log('\nState-level rules cascade down to counties');
+  const pack = (await call('POST', '/api/code-packs/ky/install')).data;
+  ok('Kentucky pack installs', pack.newJurisdictions === 3 && pack.newRules === 14,
+    JSON.stringify(pack));
+
+  const after = (await call('GET', '/api/state')).data;
+  const kyState = after.jurisdictions.find((j) => j.state === 'KY' && !j.county);
+  const grant = after.jurisdictions.find((j) => j.county === 'Grant');
+  const pendleton = after.jurisdictions.find((j) => j.county === 'Pendleton');
+  ok('state, Grant and Pendleton all created', !!kyState && !!grant && !!pendleton);
+
+  const kyRules = after.codeRules.filter((r) => r.jurisdictionId === kyState.id);
+  ok('the plumbing rules sit at the state level', kyRules.length >= 10, `${kyRules.length}`);
+  ok('nothing from the pack is confirmed', after.codeRules.every((r) => !r.verified));
+  ok('nothing from the pack carries a value',
+    kyRules.every((r) => r.check.min == null && r.check.max == null));
+  ok('every pack rule names the regulation to read',
+    kyRules.every((r) => r.citation.length > 5));
+
+  // confirm one state rule, then check a Grant County job picks it up
+  const kyDepth = kyRules.find((r) => r.title === 'Minimum cover over water service');
+  await call('POST', `/api/code-rules/${kyDepth.id}`, {
+    jurisdictionId: kyState.id, title: kyDepth.title, mode: 'bind', bindToStep: 'depth',
+    citation: kyDepth.citation, appliesTo: ['tpl_water_line'],
+    check: { kind: 'min', unit: 'inches', min: 30 },
+  });
+  await call('POST', `/api/code-rules/${kyDepth.id}/verify`, { verifiedBy: 'R. Dual' });
+
+  const grantJob = (await call('POST', '/api/jobs',
+    { templateId: waterLine.id, crewId: member.id, address: 'Grant Co', jurisdictionId: grant.id })).data;
+  const grantView = (await crew('GET', `/api/job/${grantJob.token}`)).data;
+  const grantDepth = grantView.steps.find((s) => s.id === 'depth');
+  ok('a Grant County job inherits the statewide rule',
+    grantDepth.codeRule?.check?.min === 30, JSON.stringify(grantDepth.codeRule?.check));
+
+  const pendJob = (await call('POST', '/api/jobs',
+    { templateId: waterLine.id, crewId: member.id, address: 'Pendleton Co', jurisdictionId: pendleton.id })).data;
+  const pendDepth = (await crew('GET', `/api/job/${pendJob.token}`)).data.steps.find((s) => s.id === 'depth');
+  ok('and so does a Pendleton County job', pendDepth.codeRule?.check?.min === 30);
+
+  const grantLocal = grantView.steps.filter((s) => s.codeRule?.citation.includes('Grant County'));
+  const pendSteps = (await crew('GET', `/api/job/${pendJob.token}`)).data.steps;
+  ok('Grant County\'s own right-of-way rule lands only on Grant jobs',
+    grantLocal.length === 1 && !pendSteps.some((s) => s.codeRule?.citation.includes('Grant County')));
+
+  ok('installing twice does not duplicate anything',
+    (await call('POST', '/api/code-packs/ky/install')).data.newRules === 0);
 
   console.log(`\n${failed === 0 ? 'PASS' : 'FAIL'} — ${passed} passed, ${failed} failed\n`);
 } catch (err) {

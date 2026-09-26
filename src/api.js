@@ -13,6 +13,7 @@ import {
   evaluateCode, isEnforceable, describeRule,
 } from './codes.js';
 import { SEED_CODE_RULES, instantiateSeedRules } from './seed-codes.js';
+import { CODE_PACKS, packList } from './code-packs.js';
 import { notifyOwner, sendSms, crewMessage, jobLink, reportLink, config } from './notify.js';
 
 class HttpError extends Error {
@@ -378,6 +379,7 @@ export function adminState() {
         enforcingCount: rules.filter(isEnforceable).length,
       };
     }),
+    codePacks: packList(),
     codeRules: d.codeRules.filter((r) => !r.archived).map((r) => ({
       ...r,
       requirementText: describeRule(r),
@@ -649,7 +651,12 @@ export function upsertJurisdiction(body, jid) {
   if (!state) bad('State is required.');
   const county = String(body.county || '').trim().slice(0, 80);
   const city = String(body.city || '').trim().slice(0, 80);
-  const name = [city, county && `${county} County`, state].filter(Boolean).join(', ');
+  // A state-level entry has no county or city, so the usual "City, X County, ST"
+  // would collapse to a bare "KY". Say what it actually is instead.
+  const name = String(body.name || '').trim().slice(0, 120)
+    || (county || city
+      ? [city, county && `${county} County`, state].filter(Boolean).join(', ')
+      : `${state} — statewide`);
   const fields = {
     state, county, city, name,
     codeBase: String(body.codeBase || '').trim().slice(0, 120),
@@ -696,6 +703,82 @@ export function loadStarterRules(jid) {
   db().codeRules.push(...fresh);
   save();
   return { added: fresh.length, skipped: SEED_CODE_RULES.length - fresh.length };
+}
+
+/**
+ * Sets up a state's jurisdictions and points its rules at the right regulations.
+ * Everything still lands blank and unverified — a pack saves you finding the
+ * citation, not reading it.
+ */
+export function installCodePack(packId) {
+  const pack = CODE_PACKS[packId];
+  if (!pack) notFound('No such pack.');
+
+  const byKey = {};
+  let newJurisdictions = 0;
+  for (const spec of pack.jurisdictions) {
+    const existing = db().jurisdictions.find((j) =>
+      !j.archived && j.state === spec.state && j.county === spec.county && j.city === spec.city);
+    if (existing) {
+      byKey[spec.key] = existing;
+      continue;
+    }
+    const jurisdiction = {
+      id: `jur_${id(8)}`,
+      state: spec.state,
+      county: spec.county,
+      city: spec.city,
+      name: spec.name
+        || (spec.county || spec.city
+          ? [spec.city, spec.county && `${spec.county} County`, spec.state].filter(Boolean).join(', ')
+          : `${spec.state} — statewide`),
+      codeBase: spec.codeBase || '',
+      notes: spec.notes || '',
+      archived: false,
+      createdAt: Date.now(),
+    };
+    db().jurisdictions.push(jurisdiction);
+    byKey[spec.key] = jurisdiction;
+    newJurisdictions += 1;
+  }
+
+  let newRules = 0;
+  for (const spec of pack.rules) {
+    const jurisdiction = byKey[spec.jurisdiction];
+    if (!jurisdiction) continue;
+    const dupe = db().codeRules.find((r) =>
+      !r.archived && r.jurisdictionId === jurisdiction.id && r.title === spec.title);
+    if (dupe) continue;
+
+    db().codeRules.push({
+      id: `rule_${id(8)}`,
+      jurisdictionId: jurisdiction.id,
+      appliesTo: spec.appliesTo || [],
+      title: spec.title,
+      citation: spec.citation || '',
+      sourceUrl: spec.sourceUrl || '',
+      plainLanguage: '',
+      lookupHint: spec.lookupHint || '',
+      mode: spec.mode || 'add',
+      bindToStep: spec.bindToStep || '',
+      insertBefore: spec.insertBefore || '',
+      capture: spec.capture || {},
+      check: { ...spec.check },
+      blocking: spec.blocking !== false,
+      verified: false,        // a pack never signs anything off for you
+      verifiedBy: '',
+      verifiedAt: null,
+      verifiedSource: '',
+      archived: false,
+      createdAt: Date.now(),
+    });
+    newRules += 1;
+  }
+
+  save();
+  logActivity('pack_installed', null,
+    `${pack.name} set up — ${newJurisdictions} jurisdiction(s) and ${newRules} rule(s) added, all waiting on a value and a sign-off.`);
+  return { pack: pack.name, newJurisdictions, newRules };
 }
 
 const CHECK_KINDS = new Set(['min', 'max', 'range', 'confirm', 'photo']);

@@ -241,6 +241,8 @@ admin('POST', '/api/templates/:id/archive', async (req, res, { id }) => json(res
 admin('POST', '/api/jobs/:id/override', async (req, res, { id }) =>
   json(res, 200, await api.decideOverride(id, await readJson(req, 8192))));
 
+admin('POST', '/api/code-packs/:id/install', async (req, res, { id }) =>
+  json(res, 200, api.installCodePack(id)));
 admin('POST', '/api/jurisdictions', async (req, res) =>
   json(res, 200, api.upsertJurisdiction(await readJson(req, 8192))));
 admin('POST', '/api/jurisdictions/:id', async (req, res, { id }) =>
